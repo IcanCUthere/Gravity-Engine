@@ -2,7 +2,7 @@ import Application;
 
 int main(int argc, const char* argv[])
 {
-	auto& app = Application::Initialize("Gravity: Control");
+	Application& app = Application::Initialize("Gravity: Control");
 
 	app.Run();
 
@@ -13,9 +13,10 @@ int main(int argc, const char* argv[])
 
 int WinMain(int argc, const char* argv[])
 {
-	auto& app = Application::Initialize("Gravity: Control");
+	Application& app = Application::Initialize("Gravity: Control");
 
 	app.Run();
+
 	Application::Terminate();
 
 	return 0;
