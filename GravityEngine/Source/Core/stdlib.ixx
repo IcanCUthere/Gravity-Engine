@@ -4,6 +4,8 @@ export import <unordered_map>;
 export import <iostream>;
 export import <functional>;
 export import <shared_mutex>;
+export import <fstream>;
+export import <string>;
 
 export template<typename T>
 using Unique = std::unique_ptr<T>;

@@ -17,6 +17,7 @@ if (!(x)) \
 
 #else
 
+#define validate(x)
 #define verify(...)
 #define THROW_ERROR()
 

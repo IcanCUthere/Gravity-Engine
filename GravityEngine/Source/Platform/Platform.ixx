@@ -24,6 +24,8 @@ export namespace PLTF
 		virtual bool ShouldClose() = 0;
 		virtual void RenameWindow(const char* title) = 0;
 		virtual void* GetNativeWindow() const = 0;
+		virtual void* GetModule() const = 0;
+		virtual void* GetMonitor() const = 0;
 	};
 
 	class DesktopWindow : public Window
@@ -40,6 +42,8 @@ export namespace PLTF
 		virtual bool ShouldClose() final override;
 		virtual void RenameWindow(const char* title) final override;
 		virtual void* GetNativeWindow() const final override;
+		virtual void* GetModule() const final override;
+		virtual void* GetMonitor() const final override;
 
 		GLFWwindow* GetGLFWwindow() const { return Handle; }
 	};
@@ -52,5 +56,18 @@ export namespace PLTF
 		return new DesktopWindow(width, height, name);
 	#endif
 	}
+
+	export class Library
+	{
+	private:
+		void* Handle;
+
+	public:
+		Library() {};
+		Library(const wchar_t* windowsName, const char* unixName);
+
+		void Load(const wchar_t* windowsName, const char* unixName);
+		void* GetFunction(const char* name);
+	};
 }
 

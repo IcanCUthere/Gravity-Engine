@@ -76,4 +76,36 @@ namespace PLTF
         return (void*)glfwGetWin32Window(Handle);
         #endif
     }
+
+    void* DesktopWindow::GetModule() const
+    {
+        #ifdef _WIN32
+        return (void*)GetModuleHandle(nullptr);
+        #endif
+    }
+
+    void* DesktopWindow::GetMonitor() const
+    {
+        return nullptr;
+    }
+
+
+    Library::Library(const wchar_t* windowsName, const char* unixName)
+    {
+        Load(windowsName, unixName);
+    }
+
+    void Library::Load(const wchar_t* windowsName, const char* unixName)
+    {
+        #ifdef _WIN32
+        Handle = LoadLibrary(windowsName);
+        #endif
+    }
+
+    void* Library::GetFunction(const char* name)
+    {
+        #ifdef _WIN32
+        return GetProcAddress((HMODULE)Handle, name);
+        #endif
+    }
 }
