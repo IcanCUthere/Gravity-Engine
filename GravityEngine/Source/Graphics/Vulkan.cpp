@@ -7,6 +7,7 @@ module;
 
 #ifdef _WIN32
 #include <Windows.h>
+#undef MemoryBarrier
 #include <vulkan/vulkan_win32.h>
 #endif
 
@@ -856,13 +857,13 @@ namespace GFX
 		return data;
 	}
 
-	inline CmdPoolCreateInfo VulkanInitCmdPoolCreateInfo(uint32_t queueFamilyIndex)
+	inline CmdPoolCreateInfo VulkanInitCmdPoolCreateInfo(Queue queue)
 	{
 		CmdPoolCreateInfo data;
 		data.VkObject.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 		data.VkObject.pNext = nullptr;
 		data.VkObject.flags = 0;
-		data.VkObject.queueFamilyIndex = queueFamilyIndex;
+		data.VkObject.queueFamilyIndex = queue.VkHandle.Index;
 		return data;
 	}
 
@@ -1260,21 +1261,27 @@ namespace GFX
 		return data;
 	}
 
-	inline BeginRecordingInfo VulkanInitBeginRecordingInfo(RenderPass renderPass, uint32_t subpass, Framebuffer framebuffer, CmdListUsageFlags usage)
+	inline BeginRecordingInfo VulkanInitBeginRecordingInfo(CmdListUsageFlags usage, const InheritanceInfo* inheritance)
 	{
 		BeginRecordingInfo data;
-		data.VkObject.InheritanceInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-		data.VkObject.InheritanceInfo.pNext = nullptr;
-		data.VkObject.InheritanceInfo.renderPass = renderPass.VkHandle;
-		data.VkObject.InheritanceInfo.subpass = subpass;
-		data.VkObject.InheritanceInfo.framebuffer = framebuffer.VkHandle;
-		data.VkObject.InheritanceInfo.occlusionQueryEnable = false;
-		data.VkObject.InheritanceInfo.queryFlags = 0;
-		data.VkObject.InheritanceInfo.pipelineStatistics = 0;
-		data.VkObject.BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		data.VkObject.BeginInfo.pNext = nullptr;
-		data.VkObject.BeginInfo.flags = toVkCmdListUsageFlags(usage);
-		data.VkObject.BeginInfo.pInheritanceInfo = &data.VkObject.InheritanceInfo;
+		data.VkObject.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		data.VkObject.pNext = nullptr;
+		data.VkObject.flags = toVkCmdListUsageFlags(usage);
+		data.VkObject.pInheritanceInfo = &inheritance->VkObject;
+		return data;
+	}
+
+	inline InheritanceInfo VulkanInitInheritanceInfo(RenderPass renderPass, uint32_t subpass, Framebuffer framebuffer)
+	{
+		InheritanceInfo data;
+		data.VkObject.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+		data.VkObject.pNext = nullptr;
+		data.VkObject.renderPass = renderPass.VkHandle;
+		data.VkObject.subpass = subpass;
+		data.VkObject.framebuffer = framebuffer.VkHandle;
+		data.VkObject.occlusionQueryEnable = false;
+		data.VkObject.queryFlags = 0;
+		data.VkObject.pipelineStatistics = 0;
 		return data;
 	}
 
@@ -1348,6 +1355,47 @@ namespace GFX
 		return data;
 	}
 
+	inline MemoryBarrier VulkanInitMemoryBarrier(AccessFlags srcAccess, AccessFlags dstAccess)
+	{
+		MemoryBarrier data;
+		data.VkObject.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+		data.VkObject.pNext = nullptr;
+		data.VkObject.srcAccessMask = toVkAccessMask(srcAccess);
+		data.VkObject.dstAccessMask = toVkAccessMask(dstAccess);
+		return data;
+	}
+
+	inline BufferBarrier VulkanInitBufferBarrier(AccessFlags srcAccess, AccessFlags dstAccess, uint32_t srcFamilyIndex, uint32_t dstFamilyIndex, Buffer buffer, uint64_t offset, uint64_t size)
+	{
+		BufferBarrier data;
+		data.VkObject.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+		data.VkObject.pNext = nullptr;
+		data.VkObject.srcAccessMask = toVkAccessMask(srcAccess);
+		data.VkObject.dstAccessMask = toVkAccessMask(dstAccess);
+		data.VkObject.srcQueueFamilyIndex = srcFamilyIndex;
+		data.VkObject.dstQueueFamilyIndex = dstFamilyIndex;
+		data.VkObject.buffer = buffer.VkHandle.Buffer;
+		data.VkObject.offset = offset;
+		data.VkObject.size = size;
+		return data;
+	}
+
+	inline ImageBarrier VulkanInitImageBarrier(AccessFlags srcAccess, AccessFlags dstAccess, uint32_t srcFamilyIndex, uint32_t dstFamilyIndex, Image image, ImageLayout oldLayout, ImageLayout newLayout, const ImageSubresourceRange& subresource)
+	{
+		ImageBarrier data;
+		data.VkObject.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		data.VkObject.pNext = nullptr;
+		data.VkObject.srcAccessMask = toVkAccessMask(srcAccess);
+		data.VkObject.dstAccessMask = toVkAccessMask(dstAccess);
+		data.VkObject.srcQueueFamilyIndex = srcFamilyIndex;
+		data.VkObject.dstQueueFamilyIndex = dstFamilyIndex;
+		data.VkObject.oldLayout = toVkImageLayout(oldLayout);
+		data.VkObject.newLayout = toVkImageLayout(newLayout);
+		data.VkObject.image = image.VkHandle.Image;
+		data.VkObject.subresourceRange = subresource.VkObject;
+		return data;
+	}
+
 #pragma endregion
 
 #pragma region command_conversion
@@ -1363,6 +1411,7 @@ namespace GFX
 		VkPhysicalDevice PhysicalDevice;
 		VkPhysicalDeviceProperties DeviceProperties;
 		VkDebugUtilsMessengerEXT DebugMessenger;
+		bool WithDebugInfo;
 
 		VkQueue RenderQueue; uint32_t RenderQueueIndex;
 		VkQueue TransferQueue; uint32_t TransferQueueIndex;
@@ -1502,6 +1551,13 @@ namespace GFX
 
 	inline void VulkanInitialize(API api)
 	{
+		#ifdef _DEBUG
+		bool debugInfo = true;
+		#else
+		bool debugInfo = false;
+		#endif
+
+		VkContext.WithDebugInfo = debugInfo;
 		VkContext.VulkanDll.Load(L"vulkan-1.dll", "");
 		VkContext.vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)VkContext.VulkanDll.GetFunction("vkGetInstanceProcAddr");
 		INIT_INST_FUNC(vkCreateInstance);
@@ -1516,12 +1572,12 @@ namespace GFX
 		uint32_t extensionCount = 1;
 		const char* extensions[10] = { VK_KHR_SURFACE_EXTENSION_NAME };
 
-#ifdef _DEBUG
-		layers[layerCount++] = "VK_LAYER_KHRONOS_validation";
-		extensions[extensionCount++] = { VK_KHR_SURFACE_EXTENSION_NAME };
-		extensions[extensionCount++] = { VK_EXT_DEBUG_UTILS_EXTENSION_NAME };
-		extensions[extensionCount++] = { VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME };
-#endif
+		if (debugInfo) {
+			layers[layerCount++] = "VK_LAYER_KHRONOS_validation";
+			extensions[extensionCount++] = { VK_KHR_SURFACE_EXTENSION_NAME };
+			extensions[extensionCount++] = { VK_EXT_DEBUG_UTILS_EXTENSION_NAME };
+			extensions[extensionCount++] = { VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME };
+		}
 
 #ifdef _WIN32
 		extensions[extensionCount++] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
@@ -1556,28 +1612,28 @@ namespace GFX
 		instInfo.enabledLayerCount = layerCount;
 		instInfo.ppEnabledLayerNames = layers;
 
-#ifdef _DEBUG
-		VkValidationFeatureEnableEXT enables[] = { VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT };
-		VkValidationFeaturesEXT features;
-		features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-		features.pNext = nullptr;
-		features.enabledValidationFeatureCount = 1;
-		features.pEnabledValidationFeatures = enables;
-		features.disabledValidationFeatureCount = 0;
-		features.pDisabledValidationFeatures = nullptr;
+		if (debugInfo) {
+			VkValidationFeatureEnableEXT enables[] = { VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT };
+			VkValidationFeaturesEXT features;
+			features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+			features.pNext = nullptr;
+			features.enabledValidationFeatureCount = 1;
+			features.pEnabledValidationFeatures = enables;
+			features.disabledValidationFeatureCount = 0;
+			features.pDisabledValidationFeatures = nullptr;
 
 
-		VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
-		debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		debugCreateInfo.pNext = &features;
-		debugCreateInfo.flags = 0;
-		debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-		debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		debugCreateInfo.pfnUserCallback = DebugCallback;
-		debugCreateInfo.pUserData = nullptr;
+			VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
+			debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+			debugCreateInfo.pNext = &features;
+			debugCreateInfo.flags = 0;
+			debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+			debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+			debugCreateInfo.pfnUserCallback = DebugCallback;
+			debugCreateInfo.pUserData = nullptr;
 
-		instInfo.pNext = &debugCreateInfo;
-#endif
+			instInfo.pNext = &debugCreateInfo;
+		}
 
 		VK_VALIDATE(VkContext.vkCreateInstance(&instInfo, nullptr, &VkContext.Instance))
 
@@ -1599,19 +1655,18 @@ namespace GFX
 		INIT_INST_FUNC(vkGetPhysicalDeviceMemoryProperties);
 		INIT_INST_FUNC(vkGetPhysicalDeviceMemoryProperties2);
 
-#ifdef _DEBUG
-		VkDebugUtilsMessengerCreateInfoEXT createInfo;
-		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		createInfo.pNext = nullptr;
-		createInfo.flags = 0;
-		createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-		createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		createInfo.pfnUserCallback = DebugCallback;
-		createInfo.pUserData = nullptr;
+		if (debugInfo) {
+			VkDebugUtilsMessengerCreateInfoEXT createInfo;
+			createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+			createInfo.pNext = nullptr;
+			createInfo.flags = 0;
+			createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+			createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+			createInfo.pfnUserCallback = DebugCallback;
+			createInfo.pUserData = nullptr;
 
-		VK_VALIDATE(VkContext.vkCreateDebugUtilsMessengerEXT(VkContext.Instance, &createInfo, nullptr, &VkContext.DebugMessenger))
-#endif
-
+			VK_VALIDATE(VkContext.vkCreateDebugUtilsMessengerEXT(VkContext.Instance, &createInfo, nullptr, &VkContext.DebugMessenger))
+		}
 
 		uint32_t deviceCount;
 		VK_VALIDATE(VkContext.vkEnumeratePhysicalDevices(VkContext.Instance, &deviceCount, nullptr))
@@ -1620,7 +1675,7 @@ namespace GFX
 		VK_VALIDATE(VkContext.vkEnumeratePhysicalDevices(VkContext.Instance, &deviceCount, GPUs))
 
 		//TODO: choose good device
-		VkContext.PhysicalDevice = GPUs[0];
+		VkContext.PhysicalDevice = GPUs[1];
 
 		delete[] GPUs;
 
@@ -1819,22 +1874,22 @@ namespace GFX
 
 		vmaDestroyAllocator(VkContext.MemoryAllocator);
 		VkContext.vkDestroyDevice(VkContext.LogicalDevice, nullptr);
-#ifdef _DEBUG
-		VkContext.vkDestroyDebugUtilsMessengerEXT(VkContext.Instance, VkContext.DebugMessenger, nullptr);
-#endif
+		if (VkContext.WithDebugInfo) {
+			VkContext.vkDestroyDebugUtilsMessengerEXT(VkContext.Instance, VkContext.DebugMessenger, nullptr);
+		}
 		VkContext.vkDestroyInstance(VkContext.Instance, nullptr);
 	}
 
-	inline void VulkanGetRenderQueue(Queue& queue, uint32_t& index)
+	inline void VulkanGetRenderQueue(Queue& queue)
 	{
-		queue.VkHandle = VkContext.RenderQueue;
-		index = VkContext.RenderQueueIndex;
+		queue.VkHandle.Queue = VkContext.RenderQueue;
+		queue.VkHandle.Index = VkContext.RenderQueueIndex;
 	}
 
-	inline void VulkanGetTransferQueue(Queue& queue, uint32_t& index)
+	inline void VulkanGetTransferQueue(Queue& queue)
 	{
-		queue.VkHandle = VkContext.TransferQueue;
-		index = VkContext.TransferQueueIndex;
+		queue.VkHandle.Queue = VkContext.TransferQueue;
+		queue.VkHandle.Index = VkContext.TransferQueueIndex;
 	}
 
 	inline void VulkanCreateBuffer(Buffer& handle, const BufferCreateInfo& createInfo)
@@ -1902,7 +1957,7 @@ namespace GFX
 
 	inline void VulkanBeginRecording(CmdList cmdList, const BeginRecordingInfo& beginInfo)
 	{
-		VK_VALIDATE(VkContext.vkBeginCommandBuffer(cmdList.VkHandle, &beginInfo.VkObject.BeginInfo))
+		VK_VALIDATE(VkContext.vkBeginCommandBuffer(cmdList.VkHandle, &beginInfo.VkObject))
 	}
 
 	inline void VulkanStopRecording(CmdList cmdList)
@@ -1915,7 +1970,7 @@ namespace GFX
 		ASSERT_HANDLE_SIZE(SubmitInfo, VkSubmitInfo);
 		VkSubmitInfo* vulkanSubmitInfo = (VkSubmitInfo*)submitInfos;
 
-		VK_VALIDATE(VkContext.vkQueueSubmit(queue.VkHandle, count, vulkanSubmitInfo, nullptr))
+		VK_VALIDATE(VkContext.vkQueueSubmit(queue.VkHandle.Queue, count, vulkanSubmitInfo, nullptr))
 	}
 
 	inline void VulkanResetCmdList(CmdList cmdList, bool releaseResources)
@@ -2061,7 +2116,7 @@ namespace GFX
 		VkContext.vkWaitSemaphores(VkContext.LogicalDevice, &info, UINT64_MAX);
 	}
 
-	inline void VulkanCreateSurface(Surface& handle, const void* window, const void* module, const void* monitor)
+	inline void VulkanCreateSurface(Surface& handle, const void* window, const void* module, Queue* presentQueue)
 	{
 		VkWin32SurfaceCreateInfoKHR surfaceInfo;
 		surfaceInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
@@ -2071,6 +2126,21 @@ namespace GFX
 		surfaceInfo.hwnd = (HWND)window;
 
 		VK_VALIDATE(VkContext.vkCreateWin32SurfaceKHR(VkContext.Instance, &surfaceInfo, nullptr, &handle.VkHandle))
+
+
+		for (uint32_t it = 0; it < VkContext.QueueFamilyCount; it++) {
+			VkBool32 presentSupport = false;
+			VK_VALIDATE(VkContext.vkGetPhysicalDeviceSurfaceSupportKHR(VkContext.PhysicalDevice, it, handle.VkHandle, &presentSupport))
+				if (presentSupport) {
+					presentQueue->VkHandle.Index = it;
+				}
+			if (presentSupport && it == VkContext.RenderQueueIndex) {
+				presentQueue->VkHandle.Index = it;
+				break;
+			}
+		}
+
+		VkContext.vkGetDeviceQueue(VkContext.LogicalDevice, presentQueue->VkHandle.Index, 0, &presentQueue->VkHandle.Queue);
 	}
 
 	inline void VulkanDestroySurface(Surface handle)
@@ -2078,7 +2148,7 @@ namespace GFX
 		VkContext.vkDestroySurfaceKHR(VkContext.Instance, handle.VkHandle, nullptr);
 	}
 
-	inline void VulkanCreateSwapchain(Swapchain& handle, const Swapchain* old, Surface surface, Queue* presentQueue, uint32_t* layers, uint32_t* imageCount, uint32_t* width, uint32_t* height)
+	inline void VulkanCreateSwapchain(Swapchain& handle, const Swapchain* old, Surface surface, Queue presentQueue, uint32_t* layers, uint32_t* imageCount, uint32_t* width, uint32_t* height)
 	{
 		VkSwapchainCreateInfoKHR swapchainInfo;
 
@@ -2172,33 +2242,17 @@ namespace GFX
 		else {
 			*width = capabilities.currentExtent.width;
 		}
-
-
-		uint32_t presentQueueIndex = 0;
-		for (uint32_t it = 0; it < VkContext.QueueFamilyCount; it++) {
-			VkBool32 presentSupport = false;
-			VK_VALIDATE(VkContext.vkGetPhysicalDeviceSurfaceSupportKHR(VkContext.PhysicalDevice, it, surface.VkHandle, &presentSupport))
-			if (presentSupport) {
-				presentQueueIndex = it;
-			}
-			if (presentSupport && it == VkContext.RenderQueueIndex) {
-				presentQueueIndex = it;
-				break;
-			}
-		}
-
-		VkContext.vkGetDeviceQueue(VkContext.LogicalDevice, presentQueueIndex, 0, &presentQueue->VkHandle);
-
 		
 		swapchainInfo.queueFamilyIndexCount = 0;
 		swapchainInfo.pQueueFamilyIndices = nullptr;
+		swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-		uint32_t indices[2] = { presentQueueIndex, VkContext.RenderQueueIndex };
-		if (presentQueueIndex != VkContext.RenderQueueIndex) {
+		uint32_t indices[2] = { presentQueue.VkHandle.Index, VkContext.RenderQueueIndex };
+		if (presentQueue.VkHandle.Index != VkContext.RenderQueueIndex) {
 			swapchainInfo.queueFamilyIndexCount = sizeof(indices) / sizeof(*indices);
 			swapchainInfo.pQueueFamilyIndices = indices;
+			swapchainInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 		}
-
 
 		swapchainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 		swapchainInfo.pNext = nullptr;
@@ -2212,7 +2266,6 @@ namespace GFX
 		swapchainInfo.oldSwapchain = old == nullptr ? nullptr : old->VkHandle;
 		swapchainInfo.clipped = true;
 		swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-		swapchainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 		VK_VALIDATE(VkContext.vkCreateSwapchainKHR(VkContext.LogicalDevice, &swapchainInfo, nullptr, &handle.VkHandle))
 	}
@@ -2251,7 +2304,7 @@ namespace GFX
 
 	inline void VulkanPresentImage(Queue presentQueue, const PresentInfo& presentInfo)
 	{
-		VkContext.vkQueuePresentKHR(presentQueue.VkHandle, &presentInfo.VkObject);
+		VkContext.vkQueuePresentKHR(presentQueue.VkHandle.Queue, &presentInfo.VkObject);
 	}
 
 	inline void VulkanCreateGraphicsPipelines(Pipeline* handles, const GraphicsPipelineCreateInfo* createInfos, uint32_t count)
@@ -2301,6 +2354,18 @@ namespace GFX
 		VkCommandBuffer* vulkanCmdLists = (VkCommandBuffer*)cmdLists;
 
 		VkContext.vkCmdExecuteCommands(cmdList.VkHandle, count, vulkanCmdLists);
+	}
+
+	inline void VulkanInsertBarrier(CmdList cmdList, PipelineStageFlags srcStages, PipelineStageFlags dstStages, DependencyFlags dependencies, const MemoryBarrier* memBarriers, uint32_t memBarrierCount, const BufferBarrier* bufBarriers, uint32_t bufBarrierCount, const ImageBarrier* imgBarriers, uint32_t imgBarrierCount)
+	{
+		ASSERT_HANDLE_SIZE(MemoryBarrier, VkMemoryBarrier);
+		ASSERT_HANDLE_SIZE(BufferBarrier, VkBufferMemoryBarrier);
+		ASSERT_HANDLE_SIZE(ImageBarrier, VkImageMemoryBarrier);
+		VkMemoryBarrier* vulkanMemBarriers = (VkMemoryBarrier*)memBarriers;
+		VkBufferMemoryBarrier* vulkanBufBarriers = (VkBufferMemoryBarrier*)bufBarriers;
+		VkImageMemoryBarrier* vulkanImgBarriers = (VkImageMemoryBarrier*)imgBarriers;
+
+		VkContext.vkCmdPipelineBarrier(cmdList.VkHandle, toVkPipelineStages(srcStages), toVkPipelineStages(dstStages), toVkDependencies(dependencies), memBarrierCount, vulkanMemBarriers, bufBarrierCount, vulkanBufBarriers, imgBarrierCount, vulkanImgBarriers);
 	}
 
 	inline void VulkanBeginRenderPass(CmdList cmdList, const RenderPassBeginInfo& beginInfo, bool inlineCommands)

@@ -1,6 +1,5 @@
 module;
 #include "Core/DebugUtils.h"
-#include <vulkan/vulkan.h>
 #include <shaderc/shaderc.h>
 
 export module Graphics;
@@ -97,7 +96,10 @@ namespace GFX
 
 	export union Queue
 	{
-		VkQueue VkHandle;
+		struct {
+			VkQueue Queue;
+			uint32_t Index;
+		} VkHandle;
 	};
 
 	export union Semaphore
@@ -517,6 +519,7 @@ namespace GFX
 
 	export enum PipelineStageFlags
 	{
+		PIPELINE_STAGE_NONE = 0,
 		PIPELINE_STAGE_TOP_OF_PIPE_BIT = 0x00000001,
 		PIPELINE_STAGE_DRAW_INDIRECT_BIT = 0x00000002,
 		PIPELINE_STAGE_VERTEX_INPUT_BIT = 0x00000004,
@@ -539,6 +542,7 @@ namespace GFX
 
 	export enum SampleCountFlags
 	{
+		SAMPLE_COUNT_NONE = 0,
 		SAMPLE_COUNT_1_BIT = 0x00000001,
 		SAMPLE_COUNT_2_BIT = 0x00000002,
 		SAMPLE_COUNT_4_BIT = 0x00000004,
@@ -551,6 +555,7 @@ namespace GFX
 
 	export enum BufferUsageFlags
 	{
+		BUFFER_USAGE_NONE = 0,
 		BUFFER_USAGE_TRANSFER_SRC_BIT = 0x00000001,
 		BUFFER_USAGE_TRANSFER_DST_BIT = 0x00000002,
 		BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT = 0x00000004,
@@ -565,6 +570,7 @@ namespace GFX
 
 	export enum CmdListUsageFlags
 	{
+		CMD_LIST_USAGE_NONE = 0,
 		CMD_LIST_USAGE_ONE_TIME_SUBMIT_BIT = 0x00000001,
 		CMD_LIST_USAGE_RENDER_PASS_CONTINUE_BIT = 0x00000002,
 		CMD_LIST_USAGE_SIMULTANEOUS_USE_BIT = 0x00000004,
@@ -573,6 +579,7 @@ namespace GFX
 
 	export enum ImageUsageFlags
 	{
+		IMAGE_USAGE_NONE = 0,
 		IMAGE_USAGE_TRANSFER_SRC_BIT = 0x00000001,
 		IMAGE_USAGE_TRANSFER_DST_BIT = 0x00000002,
 		IMAGE_USAGE_SAMPLED_BIT = 0x00000004,
@@ -586,6 +593,7 @@ namespace GFX
 
 	export enum ColorFlags
 	{
+		COLOR_COMPONENT_NONE = 0,
 		COLOR_COMPONENT_R_BIT = 0x00000001,
 		COLOR_COMPONENT_G_BIT = 0x00000002,
 		COLOR_COMPONENT_B_BIT = 0x00000004,
@@ -604,6 +612,7 @@ namespace GFX
 
 	export enum AccessFlags
 	{
+		ACCESS_NONE = 0,
 		ACCESS_INDIRECT_COMMAND_READ_BIT = 0x00000001,
 		ACCESS_INDEX_READ_BIT = 0x00000002,
 		ACCESS_VERTEX_ATTRIBUTE_READ_BIT = 0x00000004,
@@ -626,6 +635,7 @@ namespace GFX
 
 	export enum DependencyFlags
 	{
+		DEPENDENCY_NONE = 0,
 		DEPENDENCY_BY_REGION_BIT = 0x00000001,
 		DEPENDENCY_DEVICE_GROUP_BIT = 0x00000004,
 		DEPENDENCY_VIEW_LOCAL_BIT = 0x00000002,
@@ -634,6 +644,7 @@ namespace GFX
 
 	export enum ShaderStageFlags
 	{
+		SHADER_STAGE_NONE = 0,
 		SHADER_STAGE_VERTEX_BIT = 0x00000001,
 		SHADER_STAGE_TESSELLATION_CONTROL_BIT = 0x00000002,
 		SHADER_STAGE_TESSELLATION_EVALUATION_BIT = 0x00000004,
@@ -647,6 +658,7 @@ namespace GFX
 
 	export enum ImageAspectFlags
 	{
+		IMAGE_ASPECT_NONE = 0,
 		IMAGE_ASPECT_COLOR_BIT = 0x00000001,
 		IMAGE_ASPECT_DEPTH_BIT = 0x00000002,
 		IMAGE_ASPECT_STENCIL_BIT = 0x00000004,
@@ -745,8 +757,8 @@ namespace GFX
 		(image, type, format, subresource))
 
 	DEFINE_GFX_UNION(CmdPoolCreateInfo, VkCommandPoolCreateInfo, NA, NA,
-		(uint32_t queueFamilyIndex),
-		(queueFamilyIndex))
+		(Queue queue),
+		(queue))
 
 	DEFINE_GFX_UNION(CmdListsCreateInfo, VkCommandBufferAllocateInfo, NA, NA,
 		(CmdPool pool, CmdListLevel level, uint32_t count),
@@ -858,9 +870,13 @@ namespace GFX
 		(const CmdList* cmdLists, const PipelineStageFlags* waitStages, uint32_t cmdListCount, const Semaphore* waitSemaphores, uint32_t waitCount, const Semaphore* signalSemaphores, uint32_t signalCount, const SubmitTimelineInfo* timelineInfo),
 		(cmdLists, waitStages, cmdListCount, waitSemaphores, waitCount, signalSemaphores, signalCount, timelineInfo))
 
-	DEFINE_GFX_UNION(BeginRecordingInfo, struct { VkCommandBufferInheritanceInfo InheritanceInfo; VkCommandBufferBeginInfo BeginInfo;}, NA, NA,
-		(RenderPass renderPass, uint32_t subpass, Framebuffer framebuffer, CmdListUsageFlags usage),
-		(renderPass, subpass, framebuffer, usage))
+	DEFINE_GFX_UNION(InheritanceInfo, VkCommandBufferInheritanceInfo, NA, NA,
+		(RenderPass renderPass, uint32_t subpass, Framebuffer framebuffer),
+		(renderPass, subpass, framebuffer))
+
+	DEFINE_GFX_UNION(BeginRecordingInfo, VkCommandBufferBeginInfo, NA, NA,
+		(CmdListUsageFlags usage, const InheritanceInfo* inheritance),
+		(usage, inheritance))
 
 	DEFINE_GFX_UNION(SamplerCreateInfo, VkSamplerCreateInfo, NA, NA,
 		(Filter magFilter, Filter minFilter, MipmapMode mipMode, AddressMode U, AddressMode V, AddressMode W, bool anisotropy, float maxAnisotropy, float mipBias, float minLod, float maxLod, bool compare, CompareOp op),
@@ -878,6 +894,18 @@ namespace GFX
 		(const Swapchain* swapchains, const uint32_t* imageIndices, uint32_t swapchainCount, const Semaphore* waitSemaphores, uint32_t waitCount),
 		(swapchains, imageIndices, swapchainCount, waitSemaphores, waitCount))
 
+	DEFINE_GFX_UNION(MemoryBarrier, VkMemoryBarrier, NA, NA,
+		(AccessFlags srcAccess, AccessFlags dstAccess),
+		(srcAccess, dstAccess))
+
+	DEFINE_GFX_UNION(BufferBarrier, VkBufferMemoryBarrier, NA, NA,
+		(AccessFlags srcAccess, AccessFlags dstAccess, uint32_t srcFamilyIndex, uint32_t dstFamilyIndex, Buffer buffer, uint64_t offset, uint64_t size),
+		(srcAccess, dstAccess, srcFamilyIndex, dstFamilyIndex, buffer, offset, size))
+
+	DEFINE_GFX_UNION(ImageBarrier, VkImageMemoryBarrier, NA, NA,
+		(AccessFlags srcAccess, AccessFlags dstAccess, uint32_t srcFamilyIndex, uint32_t dstFamilyIndex, Image image, ImageLayout oldLayout, ImageLayout newLayout, const ImageSubresourceRange& subresource),
+		(srcAccess, dstAccess, srcFamilyIndex, dstFamilyIndex, image, oldLayout, newLayout, subresource))
+
 
 
 
@@ -891,12 +919,12 @@ namespace GFX
 		(),)
 
 	DEFINE_GFX_FUNCTION(GetRenderQueue,
-		(Queue& queue, uint32_t& index),
-		(queue, index),)
+		(Queue& queue),
+		(queue),)
 
 	DEFINE_GFX_FUNCTION(GetTransferQueue,
-		(Queue& queue, uint32_t& index),
-		(queue, index),)
+		(Queue& queue),
+		(queue),)
 
 	DEFINE_GFX_FUNCTION(CreateBuffer,
 		(Buffer& handle, const BufferCreateInfo& createInfo),
@@ -1035,15 +1063,15 @@ namespace GFX
 		(semaphores, values, count),)
 		
 	DEFINE_GFX_FUNCTION(CreateSurface,
-		(Surface& surface, const void* window, const void* module, const void* monitor),
-		(surface, window, module, monitor),)
+		(Surface& surface, const void* window, const void* module, Queue* presentQueue),
+		(surface, window, module, presentQueue),)
 
 	DEFINE_GFX_FUNCTION(DestroySurface,
 		(Surface surface),
 		(surface),)
 
 	DEFINE_GFX_FUNCTION(CreateSwapchain,
-		(Swapchain& handle, const Swapchain* old, Surface surface, Queue* presentQueue, uint32_t* layers, uint32_t* imageCount, uint32_t* width, uint32_t* height),
+		(Swapchain& handle, const Swapchain* old, Surface surface, Queue presentQueue, uint32_t* layers, uint32_t* imageCount, uint32_t* width, uint32_t* height),
 		(handle, old, surface, presentQueue, layers, imageCount, width, height),)
 
 	DEFINE_GFX_FUNCTION(DestroySwapchain,
@@ -1099,6 +1127,10 @@ namespace GFX
 	DEFINE_GFX_FUNCTION(EndRenderPass,
 		(CmdList cmdList),
 		(cmdList),)
+
+	DEFINE_GFX_FUNCTION(InsertBarrier,
+		(CmdList cmdList, PipelineStageFlags srcStages, PipelineStageFlags dstStages, DependencyFlags dependencies, const MemoryBarrier* memBarriers, uint32_t memBarrierCount, const BufferBarrier* bufBarriers, uint32_t bufBarrierCount, const ImageBarrier* imgBarriers, uint32_t imgBarrierCount),
+		(cmdList, srcStages, dstStages, dependencies, memBarriers, memBarrierCount, bufBarriers, bufBarrierCount, imgBarriers, imgBarrierCount),)
 
 	DEFINE_GFX_FUNCTION(BindViewports,
 		(CmdList cmdList, const Viewport* viewports, uint32_t viewportCount, uint32_t startIndex),

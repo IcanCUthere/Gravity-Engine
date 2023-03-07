@@ -2,7 +2,13 @@ export module Application;
 import Events;
 import Platform;
 import Graphics;
+import Viewport;
+import Timestep;
+import Camera;
 import stdlib;
+
+const uint32_t MAX_IMAGE_COUNT = 3;
+
 
 export class Application
 {
@@ -11,28 +17,29 @@ private:
 
 private:
 	bool ShouldRun = true;
-	PLTF::Window* Window;
 	GFX::RenderPass renderPass;
-	GFX::Surface surface;
-	GFX::Swapchain swapchain;
-	GFX::Image images[3];
-	GFX::ImageView views[3];
-	GFX::Framebuffer framebuffers[2];
-	GFX::Queue presentQueue;
-	GFX::Image depthBuffer;
-	GFX::Queue renderQueue; uint32_t renderQueueIndex;
+	GFX::Queue renderQueue;
 	GFX::Buffer stagingBuffer;
 	GFX::Buffer vertexBuffer;
 	GFX::Buffer indexBuffer;
-	GFX::CmdPool renderPool;
-	GFX::CmdList cmdList;
+	GFX::Buffer uniformBuffer;
+	GFX::Image image;
+	GFX::ImageView imageView;
+	GFX::Sampler sampler;
 	GFX::Shader shaders[2];
 	GFX::DescriptorLayout descriptorLayout;
+	GFX::DescriptorPool descriptorPool;
+	GFX::DescriptorSet descriptorSet;
 	GFX::PipelineLayout layout;
 	GFX::Pipeline pipeline;
 	GFX::Semaphore timelineSemaphore;
-	GFX::Semaphore binarySemaphore;
+	GFX::Semaphore binarySemaphores[MAX_IMAGE_COUNT];
+	GFX::CmdPool cmdPools[MAX_IMAGE_COUNT];
+	GFX::CmdList cmdLists[MAX_IMAGE_COUNT];
 	uint64_t semaphoreValue = 1;
+
+	Viewport<MAX_IMAGE_COUNT>* viewport;
+	Camera camera;
 
 	Application(const char* name);
 	Application(const Application&) = delete;
